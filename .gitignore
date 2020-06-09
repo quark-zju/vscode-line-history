@@ -1,0 +1,6 @@
+out
+dist
+node_modules
+stats.json
+.vscode-test/
+*.vsix
