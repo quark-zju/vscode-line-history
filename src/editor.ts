@@ -13,8 +13,6 @@ import { displayTime } from './dateutil';
 const kLinelogScheme = "linelog";
 
 class LinelogProvider implements vscode.TextDocumentContentProvider {
-	// onDidChangeEmitter = new vscode.EventEmitter<vscode.Uri>();
-	// onDidChange = this.onDidChangeEmitter.event;
 	provideTextDocumentContent(uri: vscode.Uri): string {
 		let log = getLineLogForPath(uri.path);
 		let params = new URLSearchParams(uri.query);
@@ -265,9 +263,6 @@ let initialize = (context: vscode.ExtensionContext) => {
 		e.files.forEach(({ oldUri, newUri }) => {
 			rename(oldUri, newUri);
 		});
-	});
-	vscode.workspace.onWillRenameFiles((e) => {
-		debugger;
 	});
 };
 
