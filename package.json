@@ -1,0 +1,182 @@
+{
+	"name": "vscode-line-history",
+	"displayName": "Line History",
+	"description": "Track line editing history",
+	"icon": "images/icon.png",
+	"version": "0.1.0",
+	"homepage": "https://github.com/quark-zju/vscode-line-history.js",
+	"author": {
+		"name": "Jun Wu",
+		"email": "quark@lihdd.net"
+	},
+	"publisher": "quark-zju",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/quark-zju/vscode-line-history.js"
+	},
+	"license": "MIT",
+	"engines": {
+		"vscode": "^1.44.0"
+	},
+	"categories": [
+		"Other"
+	],
+	"activationEvents": [
+		"*"
+	],
+	"main": "./dist/extension.js",
+	"contributes": {
+		"commands": [
+			{
+				"command": "lineHistory.lineTimestamp",
+				"title": "Show Line History"
+			},
+			{
+				"command": "lineHistory.toggleDeletedLines",
+				"icon": "$(selection)",
+				"title": "Toggle Deleted Lines"
+			},
+			{
+				"command": "lineHistory.previousRev",
+				"icon": "$(triangle-up)",
+				"title": "Previous Revision"
+			},
+			{
+				"command": "lineHistory.nextRev",
+				"icon": "$(triangle-down)",
+				"title": "Next Revision"
+			},
+			{
+				"command": "lineHistory.currentLineRev",
+				"icon": "$(triangle-down)",
+				"title": "Selected Line Revision"
+			}
+		],
+		"menus": {
+			"editor/title/context": [
+				{
+					"command": "lineHistory.lineTimestamp",
+					"when": "resourceScheme == file"
+				},
+				{
+					"command": "lineHistory.lineTimestamp",
+					"when": "resourceScheme == untitled"
+				},
+				{
+					"command": "lineHistory.toggleDeletedLines",
+					"group": "navigation",
+					"when": "resourceScheme == linelog"
+				}
+			],
+			"editor/title": [
+				{
+					"command": "lineHistory.toggleDeletedLines",
+					"group": "navigation",
+					"when": "resourceScheme == linelog"
+				},
+				{
+					"command": "lineHistory.nextRev",
+					"group": "navigation",
+					"when": "resourceScheme == linelog"
+				},
+				{
+					"command": "lineHistory.previousRev",
+					"group": "navigation",
+					"when": "resourceScheme == linelog"
+				}
+			],
+			"commandPalette": [
+				{
+					"command": "lineHistory.lineTimestamp",
+					"when": "resourceScheme == file"
+				},
+				{
+					"command": "lineHistory.lineTimestamp",
+					"when": "resourceScheme == untitled"
+				},
+				{
+					"command": "lineHistory.toggleDeletedLines",
+					"when": "resourceScheme == linelog"
+				},
+				{
+					"command": "lineHistory.previousRev",
+					"when": "resourceScheme == linelog"
+				},
+				{
+					"command": "lineHistory.nextRev",
+					"when": "resourceScheme == linelog"
+				},
+				{
+					"command": "lineHistory.currentLineRev",
+					"when": "resourceScheme == linelog"
+				}
+			]
+		},
+		"keybindings": [
+			{
+				"command": "lineHistory.lineTimestamp",
+				"when": "resourceScheme == file",
+				"key": "ctrl+k l"
+			},
+			{
+				"command": "lineHistory.lineTimestamp",
+				"when": "resourceScheme == untitled",
+				"key": "ctrl+k l"
+			},
+			{
+				"command": "lineHistory.toggleDeletedLines",
+				"when": "resourceScheme == linelog",
+				"key": "d"
+			},
+			{
+				"command": "lineHistory.previousRev",
+				"when": "resourceScheme == linelog",
+				"key": "["
+			},
+			{
+				"command": "lineHistory.nextRev",
+				"when": "resourceScheme == linelog",
+				"key": "]"
+			},
+			{
+				"command": "lineHistory.currentLineRev",
+				"when": "resourceScheme == linelog",
+				"key": "enter"
+			}
+		],
+		"configuration": {
+			"title": "Line History",
+			"properties": {
+				"lineHistory.showLineTimestamp": {
+					"type": "boolean",
+					"default": false,
+					"description": "Show timestamps on the gutter"
+				}
+			}
+		}
+	},
+	"scripts": {
+		"vscode:prepublish": "webpack --mode production",
+		"compile": "webpack --mode development",
+		"watch": "webpack --mode development --watch",
+		"lint": "eslint src --ext ts --fix",
+		"pretest": "npm run compile && npm run lint"
+	},
+	"devDependencies": {
+		"@types/diff-match-patch": "^1.0.32",
+		"@types/mkdirp": "^1.0.1",
+		"@types/node": "^13.11.0",
+		"@types/vscode": "^1.45.0",
+		"@typescript-eslint/eslint-plugin": "^2.30.0",
+		"@typescript-eslint/parser": "^2.30.0",
+		"eslint": "^6.8.0",
+		"ts-loader": "^7.0.5",
+		"typescript": "^3.8.3",
+		"webpack": "^4.43.0",
+		"webpack-cli": "^3.3.11"
+	},
+	"dependencies": {
+		"linelog": "^1.1.1",
+		"mkdirp": "^1.0.4"
+	}
+}
