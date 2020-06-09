@@ -6,15 +6,15 @@ Track uncommitted line changes as you type.
 
 Annotate lines with timestamps in real time. Think about `git blame`, but without explicit `git add` or `git commit`.
 
-![Line Timestamp](images/line-timestamp.png)
+![Line Timestamp](https://github.com/quark-zju/vscode-line-history/raw/e26319070a3a23ef3740b98a229b8287953f4442/images/line-timestamp.png)
 
 View previous versions ever typed. Think about fine grained undo history that persists across VSCode restarts, and with `blame` integrated.
 
-![Previous Version](images/previous-version.png)
+![Previous Version](https://github.com/quark-zju/vscode-line-history/raw/e26319070a3a23ef3740b98a229b8287953f4442/images/previous-version.png)
 
 Show all (including deleted) lines in a single view. Think about `git diff` but instead of comparing two versions, compare all versions together.
 
-![All Lines](images/all-lines.png)
+![All Lines](https://github.com/quark-zju/vscode-line-history/raw/e26319070a3a23ef3740b98a229b8287953f4442/images/all-lines.png)
 
 ## Usage
 
