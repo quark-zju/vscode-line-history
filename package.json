@@ -9,7 +9,7 @@
 		"name": "Jun Wu",
 		"email": "quark@lihdd.net"
 	},
-	"publisher": "quark-zju",
+	"publisher": "lihdd",
 	"repository": {
 		"type": "git",
 		"url": "https://github.com/quark-zju/vscode-line-history.js"
