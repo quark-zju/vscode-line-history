@@ -98,7 +98,7 @@ let renderDecorations = async (editor: vscode.TextEditor | undefined, decoration
 			let backgroundColor: string | vscode.ThemeColor = `rgba(${backgroundRgb},${Math.round(opacity * 10) / 10.0})`;
 			let hoverMessage = new vscode.MarkdownString();
 			if (info.commit) {
-				hoverMessage.appendText(`${info.commit.author} ${new Date(info.commit.timestamp * 1000).toString()}`);
+				hoverMessage.appendText(`${info.commit.author.split(" <")[0]} · ${displayTime(ts, now)}`);
 				hoverMessage.appendCodeblock(info.commit.message, "plain");
 			} else {
 				hoverMessage.appendText(new Date(ts).toString());
