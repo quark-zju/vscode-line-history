@@ -20,7 +20,7 @@ let load = async (path: string, filePath: string): Promise<LineLog> => {
 	} else if (config.importGit) {
 		let root = findGitRoot(filePath);
 		if (root) {
-			let relative = relativePath(root, filePath);
+			let relative = relativePath(root, filePath).replace(/\\/g, '/');
 			if (relative.indexOf("..") < 0) {
 				try {
 					let log = await git.buildLineLogFromGitHistory(root, relative);
