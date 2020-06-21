@@ -3,4 +3,6 @@ dist
 node_modules
 stats.json
 .vscode-test/
+.vscode/
+vsc-*.md
 *.vsix
