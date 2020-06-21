@@ -37,6 +37,11 @@
 				"title": "Toggle Deleted Lines"
 			},
 			{
+				"command": "lineHistory.rebuildHistory",
+				"icon": "$(selection)",
+				"title": "Clear Uncommitted Line History"
+			},
+			{
 				"command": "lineHistory.previousRev",
 				"icon": "$(triangle-up)",
 				"title": "Previous Revision"
@@ -66,6 +71,11 @@
 					"command": "lineHistory.toggleDeletedLines",
 					"group": "navigation",
 					"when": "resourceScheme == linelog"
+				},
+				{
+					"command": "lineHistory.rebuildHistory",
+					"group": "navigation",
+					"when": "resourceScheme == linelog"
 				}
 			],
 			"editor/title": [
@@ -93,6 +103,10 @@
 				{
 					"command": "lineHistory.lineTimestamp",
 					"when": "resourceScheme == untitled"
+				},
+				{
+					"command": "lineHistory.rebuildHistory",
+					"when": "resourceScheme == linelog"
 				},
 				{
 					"command": "lineHistory.toggleDeletedLines",
@@ -147,6 +161,11 @@
 		"configuration": {
 			"title": "Line History",
 			"properties": {
+				"lineHistory.importFromGit": {
+					"type": "boolean",
+					"default": true,
+					"description": "Import initial history from Git"
+				},
 				"lineHistory.showLineTimestamp": {
 					"type": "boolean",
 					"default": false,

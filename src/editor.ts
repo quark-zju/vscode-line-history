@@ -6,15 +6,16 @@
 //   lines, etc.
 
 import * as vscode from 'vscode';
-import { rename, save, getLineLogPath, getLineLogForPath, getLineLogForFile } from './state';
+import { rename, save, getLineLogPath, getLineLogForPath, getLineLogForFile, setImportGit, recreateLineLog, normalizeText } from './state';
 import { URLSearchParams } from 'url';
 import { displayTime } from './dateutil';
+import { git } from 'linelog';
 
 const kLinelogScheme = "linelog";
 
 class LinelogProvider implements vscode.TextDocumentContentProvider {
-	provideTextDocumentContent(uri: vscode.Uri): string {
-		let log = getLineLogForPath(uri.path);
+	async provideTextDocumentContent(uri: vscode.Uri): Promise<string> {
+		let log = await getLineLogForPath(uri.path);
 		let params = new URLSearchParams(uri.query);
 		let rev = parseInt(params.get("rev") || log.maxRev.toString());
 		let start = params.has("start") ? parseInt(params.get("start") || "0") : null;
@@ -38,11 +39,12 @@ class LinelogProvider implements vscode.TextDocumentContentProvider {
 	}
 }
 
-let renderDecorations = (editor: vscode.TextEditor | undefined, decorationTypes: DecorationTypes) => {
+let renderDecorations = async (editor: vscode.TextEditor | undefined, decorationTypes: DecorationTypes) => {
 	if (!editor) {
 		return;
 	}
 	let document = editor.document;
+	let fileName = document.fileName;
 	let scheme = document.uri.scheme;
 	if (scheme !== "file" && scheme !== kLinelogScheme && scheme !== "untitled") {
 		return;
@@ -53,7 +55,7 @@ let renderDecorations = (editor: vscode.TextEditor | undefined, decorationTypes:
 	let deletedDecorations = [];
 	let config = vscode.workspace.getConfiguration("lineHistory");
 	if (scheme === kLinelogScheme || config.get("showLineTimestamp") !== false) {
-		let log = getLineLogForFile(document);
+		let log = await getLineLogForFile(document);
 		let params = new URLSearchParams(document.uri.query);
 		let rev = parseInt(params.get("rev") || log.maxRev.toString());
 		let start = params.has("start") ? parseInt(params.get("start") || "0") : null;
@@ -64,19 +66,27 @@ let renderDecorations = (editor: vscode.TextEditor | undefined, decorationTypes:
 		log.checkOut(rev, start);
 
 		let newest = log.getLineTimestamp(0);
-		let oldest = newest;
+		let oldestNonGit = newest;
+		let oldestGit = newest;
 		for (let line = 0; line < log.lines.length - 1; ++line) {
 			let ts = log.getLineTimestamp(line);
+			let info = log.getLineExtra(line);
 			if (ts > newest) { newest = ts; }
-			if (ts < oldest) { oldest = ts; }
+			if ("commit" in info) {
+				if (ts < oldestGit) { oldestGit = ts; }
+			} else {
+				if (ts < oldestNonGit) { oldestNonGit = ts; }
+			}
 		}
-		let secondsRange = newest - oldest;
 
 		let now = Date.now();
 		let color = new vscode.ThemeColor("textPreformat.foreground");
 		let lastTs = 0;
 		for (let line = 0; line < log.lines.length - 1; ++line) {
 			let ts = log.getLineTimestamp(line);
+			let info = log.getLineExtra(line) as git.CommitPathInfo;
+			let oldest = info.commit ? oldestGit : oldestNonGit;
+			let secondsRange = newest - oldest;
 			let opacity = Math.min((ts - oldest) / secondsRange, 1);
 			let range = new vscode.Range(
 				new vscode.Position(line, 0),
@@ -84,8 +94,15 @@ let renderDecorations = (editor: vscode.TextEditor | undefined, decorationTypes:
 			);
 			let message = lastTs === ts ? "" : displayTime(ts, now);
 			lastTs = ts;
-			let backgroundColor: string | vscode.ThemeColor = `rgba(246,106,10,${Math.round(opacity * 10) / 10.0})`;
-			let hoverMessage = new vscode.MarkdownString(new Date(ts).toString());
+			let backgroundRgb = info.commit ? "136,138,133" : "246,106,10";
+			let backgroundColor: string | vscode.ThemeColor = `rgba(${backgroundRgb},${Math.round(opacity * 10) / 10.0})`;
+			let hoverMessage = new vscode.MarkdownString();
+			if (info.commit) {
+				hoverMessage.appendText(`${info.commit.author} ${new Date(info.commit.timestamp * 1000).toString()}`);
+				hoverMessage.appendCodeblock(info.commit.message, "plain");
+			} else {
+				hoverMessage.appendText(new Date(ts).toString());
+			}
 			let deleted = log.lines[line].deleted;
 			if (deleted) {
 				hoverMessage.appendText(" (deleted)");
@@ -94,6 +111,9 @@ let renderDecorations = (editor: vscode.TextEditor | undefined, decorationTypes:
 			if (scheme === kLinelogScheme) {
 				let params = new URLSearchParams(document.uri.query);
 				let rev = log.lines[line].rev.toString();
+				if (info.commit) {
+					rev += ` (${info.commit.commit.substr(0, 7)})`;
+				}
 				params.set("rev", rev);
 				let uri = document.uri.with({ query: params.toString() });
 				hoverMessage.appendMarkdown(`\n\n[Check out Rev ${rev}](${uri})`);
@@ -128,7 +148,7 @@ interface DecorationTypes {
 	deletedLineDecorationType: vscode.TextEditorDecorationType;
 }
 
-let reopenEditParams = async (scheme: string, editParams: (editor: vscode.TextEditor, params: URLSearchParams) => void) => {
+let reopenEditParams = async (scheme: string, editParams: (editor: vscode.TextEditor, params: URLSearchParams) => Promise<void>) => {
 	let editor = vscode.window.activeTextEditor;
 	if (!editor) { return; }
 	let { document } = editor;
@@ -136,7 +156,7 @@ let reopenEditParams = async (scheme: string, editParams: (editor: vscode.TextEd
 	let log = getLineLogForFile(document);
 	let query = document.uri.query;
 	let params = new URLSearchParams(query);
-	editParams(editor, params);
+	await editParams(editor, params);
 	query = params.toString();
 	let uri = document.uri.with({ query, scheme: kLinelogScheme, path: document.fileName });
 	await vscode.window.showTextDocument(uri, { preview: true });
@@ -148,14 +168,14 @@ let initialize = (context: vscode.ExtensionContext) => {
 
 	// Register commands.
 	context.subscriptions.push(vscode.commands.registerCommand('lineHistory.lineTimestamp', async () => {
-		await reopenEditParams("file,untitled", ({ document }, params) => {
-			let log = getLineLogForFile(document);
+		await reopenEditParams("file,untitled", async ({ document }, params) => {
+			let log = await getLineLogForFile(document);
 			params.set("rev", log.maxRev.toString());
 		});
 	}));
 
 	context.subscriptions.push(vscode.commands.registerCommand('lineHistory.toggleDeletedLines', async () => {
-		await reopenEditParams(kLinelogScheme, (editor, params) => {
+		await reopenEditParams(kLinelogScheme, async (editor, params) => {
 			if (params.get("start") === null) {
 				params.set("start", "0");
 			} else {
@@ -164,27 +184,36 @@ let initialize = (context: vscode.ExtensionContext) => {
 		});
 	}));
 
+	context.subscriptions.push(vscode.commands.registerCommand('lineHistory.rebuildHistory', async () => {
+		await reopenEditParams(kLinelogScheme, async ({ document }, params) => {
+			recreateLineLog(document);
+			let log = await getLineLogForFile(document);
+			let epoch = params.get("epoch") || "0";
+			params.set("epoch", (parseInt(epoch) + 1).toString());
+			params.set("rev", log.maxRev.toString());
+		});
+	}));
+
 	context.subscriptions.push(vscode.commands.registerCommand('lineHistory.previousRev', async () => {
-		await reopenEditParams(kLinelogScheme, ({ document }, params) => {
-			let log = getLineLogForFile(document);
+		await reopenEditParams(kLinelogScheme, async ({ document }, params) => {
 			let rev = parseInt(params.get("rev") || "0");
 			params.set("rev", Math.max(rev - 1, 1).toString());
 		});
 	}));
 
 	context.subscriptions.push(vscode.commands.registerCommand('lineHistory.nextRev', async () => {
-		await reopenEditParams(kLinelogScheme, ({ document }, params) => {
-			let log = getLineLogForFile(document);
+		await reopenEditParams(kLinelogScheme, async ({ document }, params) => {
+			let log = await getLineLogForFile(document);
 			let rev = parseInt(params.get("rev") || "0");
 			params.set("rev", Math.min(rev + 1, log.maxRev).toString());
 		});
 	}));
 
 	context.subscriptions.push(vscode.commands.registerCommand('lineHistory.currentLineRev', async () => {
-		await reopenEditParams(kLinelogScheme, (editor, params) => {
+		await reopenEditParams(kLinelogScheme, async (editor, params) => {
 			let document = editor.document;
 			let line = editor.selection.active.line;
-			let log = getLineLogForFile(document);
+			let log = await getLineLogForFile(document);
 			let rev = parseInt(params.get("rev") || "0");
 			let start = params.has("start") ? parseInt(params.get("start") || "0") : null;
 			log.checkOut(rev, start);
@@ -210,8 +239,12 @@ let initialize = (context: vscode.ExtensionContext) => {
 
 	// Handle config changes.
 	vscode.workspace.onDidChangeConfiguration((e) => {
-		if (e.affectsConfiguration("editingHistory.showLineTimestamp")) {
+		if (e.affectsConfiguration("lineHistory.showLineTimestamp")) {
 			renderDecorations(vscode.window.activeTextEditor, decorations);
+		}
+		if (e.affectsConfiguration("lineHistory.importFromGit")) {
+			let config = vscode.workspace.getConfiguration("lineHistory");
+			setImportGit(config.get("importFromGit", true));
 		}
 	});
 
@@ -221,18 +254,14 @@ let initialize = (context: vscode.ExtensionContext) => {
 	});
 
 	// Monitor content changes.
-	let recordDocument = (document: vscode.TextDocument) => {
+	let recordDocument = async (document: vscode.TextDocument) => {
 		let scheme = document.uri.scheme;
 		if (scheme !== "file" && scheme !== "untitled") {
 			return;
 		}
-		let log = getLineLogForFile(document);
+		let log = await getLineLogForFile(document);
 		log.checkOut(log.maxRev);
-		let text = document.getText();
-		// Normalize the last line to end with "\n".
-		if (!text.endsWith("\n")) {
-			text += "\n";
-		}
+		let text = normalizeText(document.getText());
 		log.recordText(text);
 	};
 	vscode.workspace.onDidOpenTextDocument((document) => {
@@ -243,7 +272,7 @@ let initialize = (context: vscode.ExtensionContext) => {
 		recordDocument(change.document);
 		renderDecorations(vscode.window.activeTextEditor, decorations);
 	});
-	vscode.workspace.onDidSaveTextDocument((document) => {
+	vscode.workspace.onDidSaveTextDocument(async (document) => {
 		let activeEditor = vscode.window.activeTextEditor;
 		if (activeEditor && activeEditor.document.isUntitled) {
 			if (document.getText() === activeEditor.document.getText()) {
@@ -255,7 +284,7 @@ let initialize = (context: vscode.ExtensionContext) => {
 				rename(activeEditor.document.uri, document.uri);
 			}
 		}
-		let log = getLineLogForFile(document);
+		let log = await getLineLogForFile(document);
 		let path = getLineLogPath(document.fileName);
 		save(path, log);
 	});

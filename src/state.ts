@@ -3,20 +3,50 @@
 import * as assert from 'assert';
 import * as vscode from 'vscode';
 import * as crypto from 'crypto';
-import { basename, dirname, join } from 'path';
-import { existsSync, readFileSync, writeFileSync } from 'fs';
-import { LineLog } from 'linelog';
+import { basename, dirname, join, relative as relativePath } from 'path';
+import { existsSync, readFileSync, writeFileSync, fstat, unlinkSync } from 'fs';
+import { LineLog, git } from 'linelog';
 import * as mkdirp from 'mkdirp';
 
 let dir: null | string = null;
+let config = { importGit: false };
 let linelogMap: { [fileName: string]: LineLog } = {};
 
-let load = (path: string): LineLog => {
-	let log = new LineLog;
+let load = async (path: string, filePath: string): Promise<LineLog> => {
 	if (existsSync(path)) {
+		let log = new LineLog;
 		log.import(readFileSync(path));
+		return log;
+	} else if (config.importGit) {
+		let root = findGitRoot(filePath);
+		if (root) {
+			let relative = relativePath(root, filePath);
+			if (relative.indexOf("..") < 0) {
+				try {
+					let log = await git.buildLineLogFromGitHistory(root, relative);
+					return log;
+				} catch {
+					return new LineLog;
+				}
+			}
+		}
 	}
-	return log;
+	return new LineLog;
+};
+
+let findGitRoot = (path: string): string | null => {
+	let current = path;
+	while (true) {
+		if (existsSync(current + "/.git")) {
+			return current;
+		} else {
+			let newPath = dirname(current);
+			if (newPath === current) {
+				return null;
+			}
+			current = newPath;
+		}
+	}
 };
 
 let save = (path: string, log: LineLog) => {
@@ -34,10 +64,10 @@ let getLineLogPath = (fileName: string): string => {
 	return linelogPath;
 };
 
-let getLineLogForPath = (fileName: string): LineLog => {
+let getLineLogForPath = async (fileName: string): Promise<LineLog> => {
 	if (!(fileName in linelogMap)) {
 		let path = getLineLogPath(fileName);
-		let log = load(path);
+		let log = await load(path, fileName);
 		linelogMap[fileName] = log;
 		return log;
 	} else {
@@ -45,23 +75,33 @@ let getLineLogForPath = (fileName: string): LineLog => {
 		return log;
 	}
 };
-let getLineLogForFile = (document: vscode.TextDocument): LineLog => {
+let getLineLogForFile = async (document: vscode.TextDocument): Promise<LineLog> => {
 	let fileName = document.fileName;
 	if (!(fileName in linelogMap)) {
 		let path = getLineLogPath(fileName);
-		let log = load(path);
+		let log = await load(path, fileName);
 		linelogMap[fileName] = log;
 		log.checkOut(log.maxRev);
-		log.recordText(document.getText());
+		log.recordText(normalizeText(document.getText()));
 		return log;
 	} else {
 		let log = linelogMap[fileName];
 		return log;
 	}
+};
+let recreateLineLog = (document: vscode.TextDocument) => {
+	let fileName = document.fileName;
+	let path = getLineLogPath(fileName);
+	try { unlinkSync(path); } catch { }
+	delete linelogMap[fileName];
 };
 
 let setContextPath = (path: string) => {
 	dir = path;
+};
+
+let setImportGit = (importGit: boolean) => {
+	config.importGit = importGit;
 };
 
 let clear = () => {
@@ -78,4 +118,28 @@ let rename = (oldUri: vscode.Uri, newUri: vscode.Uri) => {
 	}
 };
 
-export { clear, rename, load, save, getLineLogPath, getLineLogForFile, getLineLogForPath, setContextPath };
+let normalizeText = (text: string): string => {
+	// CRLF -> LF.
+	if (text.indexOf("\r") >= 0) {
+		text = text.replace(/\r\n/g, "\n");
+	}
+	// Use LF at EOF.
+	if (!text.endsWith("\n")) {
+		text += "\n";
+	}
+	return text;
+};
+
+export {
+	clear,
+	rename,
+	load,
+	save,
+	getLineLogPath,
+	getLineLogForFile,
+	getLineLogForPath,
+	normalizeText,
+	recreateLineLog,
+	setContextPath,
+	setImportGit,
+};
